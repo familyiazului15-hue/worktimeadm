@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Админ-Панель</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <style>
+        .view { display: none; }
+        .view.active { display: flex; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center justify-center p-4 font-sans select-none">
+
+    <!-- ЭКРАН 1: СПИСОК СОТРУДНИКОВ -->
+    <div id="view-admin-dashboard" class="view active w-full max-w-xl bg-slate-900 p-6 rounded-3xl shadow-2xl border border-slate-800 flex-col">
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h2 class="text-2xl font-bold text-white">Панель управления</h2>
+                <p class="text-xs text-slate-400">Сотрудники и их рабочие часы</p>
+            </div>
+        </div>
+        <button onclick="openEmployeeEditor()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold mb-4 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2">
+            <span>+ Добавить сотрудника</span>
+        </button>
+        <div id="admin-employee-list" class="space-y-3 max-h-96 overflow-y-auto pr-1"></div>
+    </div>
+
+    <!-- ЭКРАН 2: ДЕТАЛИ СОТРУДНИКА -->
+    <div id="view-admin-employee-detail" class="view w-full max-w-2xl bg-slate-900 p-6 rounded-3xl shadow-2xl border border-slate-800 flex-col">
+        <div class="flex justify-between items-start mb-6 gap-4">
+            <div>
+                <h2 id="admin-detail-name" class="text-2xl font-bold text-white">---</h2>
+                <p class="text-sm text-slate-400 mt-0.5">Баланс времени: <span id="admin-detail-total" class="font-bold text-emerald-400">0 ч.</span></p>
+            </div>
+            <button onclick="openLogEditor()" class="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-bold active:scale-95 transition-all cursor-pointer">+ Добавить день</button>
+        </div>
+        <div class="overflow-x-auto max-h-72 overflow-y-auto mb-6 border border-slate-800 rounded-xl bg-slate-950/50">
+            <table class="w-full text-sm text-left border-collapse">
+                <thead class="text-slate-500 uppercase text-xs bg-slate-950 sticky top-0 border-b border-slate-800">
+                    <tr>
+                        <th class="p-4">Дата</th>
+                        <th class="p-4">Приход</th>
+                        <th class="p-4">Уход</th>
+                        <th class="p-4">Отработано</th>
+                        <th class="p-4 text-right">Действие</th>
+                    </tr>
+                </thead>
+                <tbody id="admin-employee-logs-body" class="text-slate-300 divide-y divide-slate-800/60"></tbody>
+            </table>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+            <button onclick="deleteEmployee()" class="py-4 rounded-xl text-sm font-semibold bg-rose-950/40 text-rose-400 border border-rose-900/30 active:scale-95 transition-all cursor-pointer">Удалить сотрудника</button>
+            <button onclick="showAdminDashboard()" class="py-4 rounded-xl text-sm font-semibold bg-slate-800 text-slate-300 active:scale-95 transition-all cursor-pointer">Назад к списку</button>
+        </div>
+    </div>
+
+    <!-- ЭКРАН 3: РЕДАКТИРОВАНИЕ ЛОГА -->
+    <div id="view-log-editor" class="view w-full max-w-md bg-slate-900 p-6 rounded-3xl shadow-2xl border border-slate-800 flex-col">
+        <h3 id="editor-title" class="text-xl font-bold text-white mb-6 text-center">Редактирование дня</h3>
+        <div class="space-y-5 mb-8">
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Дата смены</label>
+                <input type="date" id="edit-date" class="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white font-medium focus:outline-none focus:border-indigo-500">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Время прихода</label>
+                <input type="time" id="edit-in" class="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono focus:outline-none focus:border-indigo-500">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Время ухода</label>
+                <input type="time" id="edit-out" class="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono focus:outline-none focus:border-indigo-500">
+            </div>
+        </div>
+        <div class="space-y-3">
+            <button onclick="saveLog()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-base active:scale-95 transition-all cursor-pointer">Сохранить день</button>
+            <div class="grid grid-cols-2 gap-3">
+                <button id="btn-delete-log" onclick="deleteLog()" class="py-3 bg-rose-950/40 text-rose-400 border border-rose-900/30 rounded-xl text-sm font-medium active:scale-95 transition-all cursor-pointer">Удалить лог</button>
+                <button onclick="closeLogEditor()" class="py-3 bg-slate-800 text-slate-300 rounded-xl text-sm font-medium active:scale-95 transition-all cursor-pointer">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ЭКРАН 4: СОЗДАНИЕ СОТРУДНИКА -->
+    <div id="view-employee-editor" class="view w-full max-w-md bg-slate-900 p-6 rounded-3xl shadow-2xl border border-slate-800 flex-col">
+        <h3 class="text-xl font-bold text-white mb-6 text-center">Новый сотрудник</h3>
+        <div class="space-y-5 mb-8">
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Имя и Фамилия</label>
+                <input type="text" id="new-emp-name" placeholder="Напр. Петр Петров" class="w-full px-4 py-4 bg-slate-950 border border-slate-800 rounded-xl text-white font-medium text-lg focus:outline-none focus:border-indigo-500">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Штрих-код / ID код</label>
+                <input type="text" id="new-emp-id" placeholder="Напр. 5555" class="w-full px-4 py-4 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono text-lg focus:outline-none focus:border-indigo-500">
+            </div>
+        </div>
+        <div class="space-y-3">
+            <button onclick="saveEmployee()" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-base active:scale-95 transition-all cursor-pointer">Сохранить сотрудника</button>
+            <button onclick="showAdminDashboard()" class="w-full py-3 bg-slate-800 text-slate-300 rounded-xl text-sm font-medium active:scale-95 transition-all cursor-pointer">Отмена</button>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = { 
+            apiKey: "AIzaSyDmXlxkW8m6u-M_-l_iYIBE2w32LmHUxVA", 
+            authDomain: "family-work-time.firebaseapp.com", 
+            databaseURL: "https://family-work-time-default-rtdb.firebaseio.com", 
+            projectId: "family-work-time", 
+            storageBucket: "family-work-time.firebasestorage.app", 
+            messagingSenderId: "959352680173", 
+            appId: "1:959352680173:web:9f34f24007cd52fe90e6e4", 
+            measurementId: "G-CH6YKMK02V" 
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let employees = [];
+        let logs = [];
+        let currentEmp = null;
+        let selectedLogId = null;
+
+        db.ref('employees').on('value', snapshot => {
+            const data = snapshot.val();
+            employees = data ? Object.values(data) : [];
+            if (document.getElementById('view-admin-dashboard').classList.contains('active')) {
+                renderAdminDashboard();
+            }
+        });
+
+        db.ref('logs').on('value', snapshot => {
+            const data = snapshot.val();
+            logs = data ? Object.values(data) : [];
+            if (document.getElementById('view-admin-employee-detail').classList.contains('active') && currentEmp) {
+                renderAdminEmployeeLogs();
+            }
+        });
+
+        function changeView(viewId) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById(viewId).classList.add('active');
+        }
+
+        function showAdminDashboard() {
+            changeView('view-admin-dashboard');
+            renderAdminDashboard();
+        }
+
+        function renderAdminDashboard() {
+            const listContainer = document.getElementById('admin-employee-list');
+            listContainer.innerHTML = '';
+            employees.forEach(emp => {
+                const empLogs = logs.filter(l => String(l.empId) === String(emp.id));
+                const totalMinutes = empLogs.reduce((acc, l) => acc + (l.out ? (new Date(l.out) - new Date(l.in)) / 60000 : 0), 0);
+                const div = document.createElement('div');
+                div.className = "w-full p-5 bg-slate-800/50 border border-slate-800 active:bg-slate-800 rounded-2xl flex justify-between items-center cursor-pointer mb-2";
+                div.onclick = () => openAdminEmployeeDetail(emp.id);
+                div.innerHTML = `<div><h3 class="font-bold text-lg text-white">${emp.name}</h3><p class="text-xs text-slate-500 font-mono">ID: ${emp.id}</p></div>
+                                 <span class="text-sm font-bold text-indigo-400 bg-indigo-950/50 px-3 py-1.5 rounded-xl border border-indigo-900/40">${formatMinutes(totalMinutes)}</span>`;
+                listContainer.appendChild(div);
+            });
+        }
+
+        function openEmployeeEditor() {
+            changeView('view-employee-editor');
+            document.getElementById('new-emp-name').value = '';
+            document.getElementById('new-emp-id').value = '';
+        }
+
+        function saveEmployee() {
+            const name = document.getElementById('new-emp-name').value.trim();
+            const id = document.getElementById('new-emp-id').value.trim();
+
+            if (!name || !id) { alert("Заполните оба поля!"); return; }
+            if (employees.some(e => String(e.id) === String(id))) { alert("Сотрудник с таким кодом уже существует!"); return; }
+
+            const newEmp = { id, name };
+            db.ref('employees/' + id).set(newEmp);
+            showAdminDashboard();
+        }
+
+        function deleteEmployee() {
+            if (confirm(`Вы действительно хотите безвозвратно удалить сотрудника ${currentEmp.name}?`)) {
+                db.ref('employees/' + currentEmp.id).remove();
+                
+                logs.filter(l => String(l.empId) === String(currentEmp.id)).forEach(l => {
+                    db.ref('logs/' + l.id).remove();
+                });
+
+                showAdminDashboard();
+            }
+        }
+
+        function openAdminEmployeeDetail(empId) {
+            currentEmp = employees.find(e => String(e.id) === String(empId));
+            changeView('view-admin-employee-detail');
+            renderAdminEmployeeLogs();
+        }
+
+        function renderAdminEmployeeLogs() {
+            document.getElementById('admin-detail-name').textContent = currentEmp.name;
+            const body = document.getElementById('admin-employee-logs-body');
+            body.innerHTML = '';
+            let totalMinutes = 0;
+            const empLogs = logs.filter(l => String(l.empId) === String(currentEmp.id)).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            empLogs.forEach(l => {
+                const start = new Date(l.in);
+                const end = l.out ? new Date(l.out) : null;
+                const diff = end ? (end - start) / 60000 : 0;
+                totalMinutes += diff;
+                body.innerHTML += `
+                    <tr class="hover:bg-slate-800/30">
+                        <td class="p-4 font-medium">${formatDisplayDate(l.date)}</td>
+                        <td class="p-4 text-slate-400 font-mono">${start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
+                        <td class="p-4 text-slate-400 font-mono">${end ? end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '<span class="text-amber-500">В смене</span>'}</td>
+                        <td class="p-4 font-semibold">${end ? formatMinutes(diff) : '-'}</td>
+                        <td class="p-4 text-right"><button onclick="openLogEditor('${l.id}')" class="px-4 py-2 bg-slate-800 text-indigo-400 rounded-xl text-xs font-bold active:scale-95 cursor-pointer">Изменить</button></td>
+                    </tr>`;
+            });
+            document.getElementById('admin-detail-total').textContent = formatMinutes(totalMinutes);
+        }
+
+        function openLogEditor(logId = null) {
+            selectedLogId = logId;
+            changeView('view-log-editor');
+            const title = document.getElementById('editor-title');
+            const deleteBtn = document.getElementById('btn-delete-log');
+            if (logId) {
+                title.textContent = "Редактирование дня"; deleteBtn.style.display = "block";
+                const logItem = logs.find(l => l.id === logId);
+                document.getElementById('edit-date').value = logItem.date;
+                document.getElementById('edit-in').value = new Date(logItem.in).toTimeString().substring(0, 5);
+                document.getElementById('edit-out').value = logItem.out ? new Date(logItem.out).toTimeString().substring(0, 5) : "";
+            } else {
+                title.textContent = "Добавление дня"; deleteBtn.style.display = "none";
+                document.getElementById('edit-date').value = new Date().toISOString().split('T')[0];
+                document.getElementById('edit-in').value = "09:00"; document.getElementById('edit-out').value = "18:00";
+            }
+        }
+
+        function closeLogEditor() { changeView('view-admin-employee-detail'); }
+
+        function saveLog() {
+            const dateVal = document.getElementById('edit-date').value;
+            const inVal = document.getElementById('edit-in').value;
+            const outVal = document.getElementById('edit-out').value;
+            if (!dateVal || !inVal) { alert("Заполните дату и время прихода"); return; }
+            
+            const isoIn = new Date(`${dateVal}T${inVal}:00`).toISOString();
+            const isoOut = outVal ? new Date(`${dateVal}T${outVal}:00`).toISOString() : null;
+
+            const logId = selectedLogId || ('log_' + Date.now());
+            const logData = { id: logId, empId: currentEmp.id, date: dateVal, in: isoIn, out: isoOut };
+
+            db.ref('logs/' + logId).set(logData);
+            changeView('view-admin-employee-detail');
+        }
+
+        function deleteLog() {
+            if (confirm("Удалить эту запись безвозвратно?")) {
+                db.ref('logs/' + selectedLogId).remove();
+                changeView('view-admin-employee-detail');
+            }
+        }
+
+        function formatMinutes(mnd) { return `${Math.floor(mnd / 60)} ч. ${Math.floor(mnd % 60)} мин.`; }
+        function formatDisplayDate(dStr) { const p = dStr.split('-'); return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : dStr; }
+    </script>
+</body>
+</html>
