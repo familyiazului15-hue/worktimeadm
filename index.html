@@ -10,11 +10,16 @@
     <style>
         .view { display: none; }
         .view.active { display: flex; }
+        /* Кастомный скроллбар для красоты */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center justify-center p-4 font-sans select-none">
 
-    <!-- ЭКРАН 1: СПИСОК СОТРУДНИКОВ -->
+    <!-- ЭКРАН 1: СПИСОК СОТРУДНИКОВ (ОБНОВЛЕНО) -->
     <div id="view-admin-dashboard" class="view active w-full max-w-xl bg-slate-900 p-6 rounded-3xl shadow-2xl border border-slate-800 flex-col">
         <div class="flex justify-between items-center mb-6">
             <div>
@@ -22,10 +27,37 @@
                 <p class="text-xs text-slate-400">Сотрудники и их рабочие часы</p>
             </div>
         </div>
-        <button onclick="openEmployeeEditor()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold mb-4 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2">
-            <span>+ Добавить сотрудника</span>
-        </button>
-        <div id="admin-employee-list" class="space-y-3 max-h-96 overflow-y-auto pr-1"></div>
+
+        <!-- Блок статистики -->
+        <div class="grid grid-cols-2 gap-4 mb-5">
+            <div class="bg-slate-950/50 p-4 rounded-2xl border border-slate-800 flex flex-col justify-center items-center text-center">
+                <span class="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-1">Всего сотрудников</span>
+                <span id="stat-emp-count" class="text-3xl font-bold text-white">0</span>
+            </div>
+            <div class="bg-slate-950/50 p-4 rounded-2xl border border-slate-800 flex flex-col justify-center items-center text-center">
+                <span class="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-1">Всего часов (база)</span>
+                <span id="stat-total-hours" class="text-2xl font-bold text-indigo-400">0 ч.</span>
+            </div>
+        </div>
+
+        <!-- Поиск -->
+        <div class="mb-5">
+            <input type="text" id="search-emp" placeholder="Поиск по имени или ID..." oninput="renderAdminDashboard()" class="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500 transition-colors">
+        </div>
+
+        <!-- Кнопки управления -->
+        <div class="grid grid-cols-2 gap-3 mb-5">
+            <button onclick="openEmployeeEditor()" class="py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2">
+                <span>+ Добавить</span>
+            </button>
+            <button onclick="exportToCSV()" class="py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-sm active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                <span>Экспорт CSV</span>
+            </button>
+        </div>
+
+        <!-- Список -->
+        <div id="admin-employee-list" class="space-y-3 max-h-80 overflow-y-auto pr-2"></div>
     </div>
 
     <!-- ЭКРАН 2: ДЕТАЛИ СОТРУДНИКА -->
@@ -133,6 +165,9 @@
         db.ref('logs').on('value', snapshot => {
             const data = snapshot.val();
             logs = data ? Object.values(data) : [];
+            if (document.getElementById('view-admin-dashboard').classList.contains('active')) {
+                renderAdminDashboard();
+            }
             if (document.getElementById('view-admin-employee-detail').classList.contains('active') && currentEmp) {
                 renderAdminEmployeeLogs();
             }
@@ -144,23 +179,106 @@
         }
 
         function showAdminDashboard() {
+            document.getElementById('search-emp').value = '';
             changeView('view-admin-dashboard');
             renderAdminDashboard();
         }
 
         function renderAdminDashboard() {
             const listContainer = document.getElementById('admin-employee-list');
+            const searchTerm = document.getElementById('search-emp').value.toLowerCase();
             listContainer.innerHTML = '';
+
+            let absoluteTotalMinutes = 0;
+
+            // Расчет общей статистики по всей базе
             employees.forEach(emp => {
                 const empLogs = logs.filter(l => String(l.empId) === String(emp.id));
+                absoluteTotalMinutes += empLogs.reduce((acc, l) => acc + (l.out ? (new Date(l.out) - new Date(l.in)) / 60000 : 0), 0);
+            });
+
+            document.getElementById('stat-emp-count').textContent = employees.length;
+            document.getElementById('stat-total-hours').textContent = formatMinutes(absoluteTotalMinutes);
+
+            // Фильтрация для списка
+            const filteredEmps = employees.filter(emp => 
+                emp.name.toLowerCase().includes(searchTerm) || String(emp.id).includes(searchTerm)
+            );
+
+            if (filteredEmps.length === 0) {
+                listContainer.innerHTML = `<p class="text-center text-slate-500 py-4 text-sm">Сотрудники не найдены</p>`;
+                return;
+            }
+
+            filteredEmps.forEach(emp => {
+                const empLogs = logs.filter(l => String(l.empId) === String(emp.id));
                 const totalMinutes = empLogs.reduce((acc, l) => acc + (l.out ? (new Date(l.out) - new Date(l.in)) / 60000 : 0), 0);
+                
                 const div = document.createElement('div');
-                div.className = "w-full p-5 bg-slate-800/50 border border-slate-800 active:bg-slate-800 rounded-2xl flex justify-between items-center cursor-pointer mb-2";
+                div.className = "w-full p-4 bg-slate-800/50 border border-slate-800 hover:bg-slate-800 active:scale-[0.98] rounded-2xl flex justify-between items-center cursor-pointer transition-all";
                 div.onclick = () => openAdminEmployeeDetail(emp.id);
-                div.innerHTML = `<div><h3 class="font-bold text-lg text-white">${emp.name}</h3><p class="text-xs text-slate-500 font-mono">ID: ${emp.id}</p></div>
-                                 <span class="text-sm font-bold text-indigo-400 bg-indigo-950/50 px-3 py-1.5 rounded-xl border border-indigo-900/40">${formatMinutes(totalMinutes)}</span>`;
+                div.innerHTML = `
+                    <div>
+                        <h3 class="font-bold text-lg text-white">${emp.name}</h3>
+                        <p class="text-xs text-slate-400 font-mono mt-0.5">ID: ${emp.id}</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs text-slate-500">${empLogs.length} смен</span>
+                        <span class="text-sm font-bold text-indigo-400 bg-indigo-950/50 px-3 py-1.5 rounded-xl border border-indigo-900/40">${formatMinutes(totalMinutes)}</span>
+                    </div>`;
                 listContainer.appendChild(div);
             });
+        }
+
+        // --- НОВЫЙ ФУНКЦИОНАЛ: Экспорт в CSV ---
+        function exportToCSV() {
+            if (employees.length === 0) {
+                alert("Нет данных для экспорта");
+                return;
+            }
+
+            // Добавляем BOM (Byte Order Mark), чтобы Excel правильно читал кириллицу (UTF-8)
+            let csvContent = "\uFEFF";
+            
+            // Заголовки столбцов
+            csvContent += "ID Сотрудника;Имя;Дата Смены;Приход;Уход;Отработано (минут);Отработано (формат)\n";
+
+            employees.forEach(emp => {
+                // Ищем и сортируем логи сотрудника по дате
+                const empLogs = logs
+                    .filter(l => String(l.empId) === String(emp.id))
+                    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+                if (empLogs.length === 0) {
+                    csvContent += `"${emp.id}";"${emp.name}";"Нет смен";"";"";"0";"0 ч. 0 мин."\n`;
+                } else {
+                    empLogs.forEach(l => {
+                        const start = new Date(l.in);
+                        const end = l.out ? new Date(l.out) : null;
+                        const diffMins = end ? (end - start) / 60000 : 0;
+
+                        const inStr = start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                        const outStr = end ? end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : "В смене (не закрыта)";
+                        const dateStr = formatDisplayDate(l.date);
+                        const formattedTime = end ? formatMinutes(diffMins) : "-";
+
+                        csvContent += `"${emp.id}";"${emp.name}";"${dateStr}";"${inStr}";"${outStr}";"${Math.floor(diffMins)}";"${formattedTime}"\n`;
+                    });
+                }
+            });
+
+            // Создаем файл и инициируем скачивание
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            
+            const today = new Date().toISOString().split('T')[0];
+            link.setAttribute("download", `Отчет_Сотрудники_${today}.csv`);
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
         function openEmployeeEditor() {
@@ -182,7 +300,7 @@
         }
 
         function deleteEmployee() {
-            if (confirm(`Вы действительно хотите безвозвратно удалить сотрудника ${currentEmp.name}?`)) {
+            if (confirm(`Вы действительно хотите безвозвратно удалить сотрудника ${currentEmp.name}? Вся его история смен также будет удалена.`)) {
                 db.ref('employees/' + currentEmp.id).remove();
                 
                 logs.filter(l => String(l.empId) === String(currentEmp.id)).forEach(l => {
@@ -206,18 +324,22 @@
             let totalMinutes = 0;
             const empLogs = logs.filter(l => String(l.empId) === String(currentEmp.id)).sort((a, b) => new Date(b.date) - new Date(a.date));
 
+            if(empLogs.length === 0) {
+                body.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500">Нет записей о сменах</td></tr>`;
+            }
+
             empLogs.forEach(l => {
                 const start = new Date(l.in);
                 const end = l.out ? new Date(l.out) : null;
                 const diff = end ? (end - start) / 60000 : 0;
                 totalMinutes += diff;
                 body.innerHTML += `
-                    <tr class="hover:bg-slate-800/30">
+                    <tr class="hover:bg-slate-800/30 transition-colors">
                         <td class="p-4 font-medium">${formatDisplayDate(l.date)}</td>
                         <td class="p-4 text-slate-400 font-mono">${start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
-                        <td class="p-4 text-slate-400 font-mono">${end ? end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '<span class="text-amber-500">В смене</span>'}</td>
+                        <td class="p-4 text-slate-400 font-mono">${end ? end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '<span class="text-amber-500 text-xs px-2 py-1 bg-amber-950/50 rounded-lg">В смене</span>'}</td>
                         <td class="p-4 font-semibold">${end ? formatMinutes(diff) : '-'}</td>
-                        <td class="p-4 text-right"><button onclick="openLogEditor('${l.id}')" class="px-4 py-2 bg-slate-800 text-indigo-400 rounded-xl text-xs font-bold active:scale-95 cursor-pointer">Изменить</button></td>
+                        <td class="p-4 text-right"><button onclick="openLogEditor('${l.id}')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-indigo-400 rounded-xl text-xs font-bold active:scale-95 cursor-pointer transition-colors">Изменить</button></td>
                     </tr>`;
             });
             document.getElementById('admin-detail-total').textContent = formatMinutes(totalMinutes);
