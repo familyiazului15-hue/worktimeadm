@@ -10,7 +10,6 @@
     <style>
         .view { display: none; }
         .view.active { display: flex; }
-        /* Кастомный скроллбар для красоты */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
@@ -19,7 +18,7 @@
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center justify-center p-4 font-sans select-none">
 
-    <!-- ЭКРАН 1: СПИСОК СОТРУДНИКОВ (ОБНОВЛЕНО) -->
+    <!-- ЭКРАН 1: СПИСОК СОТРУДНИКОВ -->
     <div id="view-admin-dashboard" class="view active w-full max-w-xl bg-slate-900 p-6 rounded-3xl shadow-2xl border border-slate-800 flex-col">
         <div class="flex justify-between items-center mb-6">
             <div>
@@ -28,15 +27,11 @@
             </div>
         </div>
 
-        <!-- Блок статистики -->
-        <div class="grid grid-cols-2 gap-4 mb-5">
+        <!-- Блок статистики (убраны общие часы) -->
+        <div class="mb-5">
             <div class="bg-slate-950/50 p-4 rounded-2xl border border-slate-800 flex flex-col justify-center items-center text-center">
                 <span class="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-1">Всего сотрудников</span>
                 <span id="stat-emp-count" class="text-3xl font-bold text-white">0</span>
-            </div>
-            <div class="bg-slate-950/50 p-4 rounded-2xl border border-slate-800 flex flex-col justify-center items-center text-center">
-                <span class="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-1">Всего часов (база)</span>
-                <span id="stat-total-hours" class="text-2xl font-bold text-indigo-400">0 ч.</span>
             </div>
         </div>
 
@@ -45,14 +40,18 @@
             <input type="text" id="search-emp" placeholder="Поиск по имени или ID..." oninput="renderAdminDashboard()" class="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500 transition-colors">
         </div>
 
-        <!-- Кнопки управления -->
-        <div class="grid grid-cols-2 gap-3 mb-5">
+        <!-- Кнопки управления (Добавлена кнопка TXT) -->
+        <div class="grid grid-cols-3 gap-3 mb-5">
             <button onclick="openEmployeeEditor()" class="py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2">
                 <span>+ Добавить</span>
             </button>
+            <button onclick="exportToTXT()" class="py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                <span>В TXT</span>
+            </button>
             <button onclick="exportToCSV()" class="py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-sm active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                <span>Экспорт CSV</span>
+                <span>В CSV</span>
             </button>
         </div>
 
@@ -189,16 +188,7 @@
             const searchTerm = document.getElementById('search-emp').value.toLowerCase();
             listContainer.innerHTML = '';
 
-            let absoluteTotalMinutes = 0;
-
-            // Расчет общей статистики по всей базе
-            employees.forEach(emp => {
-                const empLogs = logs.filter(l => String(l.empId) === String(emp.id));
-                absoluteTotalMinutes += empLogs.reduce((acc, l) => acc + (l.out ? (new Date(l.out) - new Date(l.in)) / 60000 : 0), 0);
-            });
-
             document.getElementById('stat-emp-count').textContent = employees.length;
-            document.getElementById('stat-total-hours').textContent = formatMinutes(absoluteTotalMinutes);
 
             // Фильтрация для списка
             const filteredEmps = employees.filter(emp => 
@@ -230,21 +220,65 @@
             });
         }
 
-        // --- НОВЫЙ ФУНКЦИОНАЛ: Экспорт в CSV ---
+        // --- ЭКСПОРТ В TXT ---
+        function exportToTXT() {
+            if (employees.length === 0) {
+                alert("Нет данных для экспорта");
+                return;
+            }
+
+            let txtContent = "";
+
+            employees.forEach(emp => {
+                const empLogs = logs
+                    .filter(l => String(l.empId) === String(emp.id))
+                    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+                const totalMinutes = empLogs.reduce((acc, l) => acc + (l.out ? (new Date(l.out) - new Date(l.in)) / 60000 : 0), 0);
+                const hours = Math.floor(totalMinutes / 60);
+                const mins = Math.floor(totalMinutes % 60);
+
+                txtContent += `${emp.name}\n`;
+                txtContent += `${emp.id}\n`;
+                txtContent += `ore total : ${hours}H ${mins}M\n`;
+
+                empLogs.forEach(l => {
+                    const start = new Date(l.in);
+                    const end = l.out ? new Date(l.out) : null;
+                    
+                    const inStr = start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    const outStr = end ? end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : "В смене";
+                    const dateStr = formatDisplayDate(l.date);
+
+                    txtContent += `     ${dateStr} ( ${inStr} - ${outStr} )\n`;
+                });
+                txtContent += "\n"; 
+            });
+
+            const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            
+            const today = new Date().toISOString().split('T')[0];
+            link.setAttribute("download", `Отчет_Сотрудники_${today}.txt`);
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // --- ЭКСПОРТ В CSV ---
         function exportToCSV() {
             if (employees.length === 0) {
                 alert("Нет данных для экспорта");
                 return;
             }
 
-            // Добавляем BOM (Byte Order Mark), чтобы Excel правильно читал кириллицу (UTF-8)
             let csvContent = "\uFEFF";
-            
-            // Заголовки столбцов
             csvContent += "ID Сотрудника;Имя;Дата Смены;Приход;Уход;Отработано (минут);Отработано (формат)\n";
 
             employees.forEach(emp => {
-                // Ищем и сортируем логи сотрудника по дате
                 const empLogs = logs
                     .filter(l => String(l.empId) === String(emp.id))
                     .sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -258,7 +292,7 @@
                         const diffMins = end ? (end - start) / 60000 : 0;
 
                         const inStr = start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                        const outStr = end ? end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : "В смене (не закрыта)";
+                        const outStr = end ? end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : "В смене";
                         const dateStr = formatDisplayDate(l.date);
                         const formattedTime = end ? formatMinutes(diffMins) : "-";
 
@@ -267,7 +301,6 @@
                 }
             });
 
-            // Создаем файл и инициируем скачивание
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
