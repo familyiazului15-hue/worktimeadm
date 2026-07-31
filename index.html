@@ -3,426 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Админ-Панель</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-    <style>
-        .view { display: none; }
-        .view.active { display: flex; }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #475569; }
-    </style>
+    <title>Вход в систему</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center justify-center p-4 font-sans select-none">
-
-    <!-- ЭКРАН 1: СПИСОК СОТРУДНИКОВ -->
-    <div id="view-admin-dashboard" class="view active w-full max-w-xl bg-slate-900 p-6 rounded-3xl shadow-2xl border border-slate-800 flex-col">
-        <div class="flex justify-between items-center mb-6">
-            <div>
-                <h2 class="text-2xl font-bold text-white">Панель управления</h2>
-                <p class="text-xs text-slate-400">Сотрудники и их рабочие часы</p>
-            </div>
-        </div>
-
-        <!-- Блок статистики (убраны общие часы) -->
-        <div class="mb-5">
-            <div class="bg-slate-950/50 p-4 rounded-2xl border border-slate-800 flex flex-col justify-center items-center text-center">
-                <span class="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-1">Всего сотрудников</span>
-                <span id="stat-emp-count" class="text-3xl font-bold text-white">0</span>
-            </div>
-        </div>
-
-        <!-- Поиск -->
-        <div class="mb-5">
-            <input type="text" id="search-emp" placeholder="Поиск по имени или ID..." oninput="renderAdminDashboard()" class="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500 transition-colors">
-        </div>
-
-        <!-- Кнопки управления (Добавлена кнопка TXT) -->
-        <div class="grid grid-cols-3 gap-3 mb-5">
-            <button onclick="openEmployeeEditor()" class="py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2">
-                <span>+ Добавить</span>
-            </button>
-            <button onclick="exportToTXT()" class="py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                <span>В TXT</span>
-            </button>
-            <button onclick="exportToCSV()" class="py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-sm active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                <span>В CSV</span>
-            </button>
-        </div>
-
-        <!-- Список -->
-        <div id="admin-employee-list" class="space-y-3 max-h-80 overflow-y-auto pr-2"></div>
-    </div>
-
-    <!-- ЭКРАН 2: ДЕТАЛИ СОТРУДНИКА -->
-    <div id="view-admin-employee-detail" class="view w-full max-w-2xl bg-slate-900 p-6 rounded-3xl shadow-2xl border border-slate-800 flex-col">
-        <div class="flex justify-between items-start mb-6 gap-4">
-            <div>
-                <h2 id="admin-detail-name" class="text-2xl font-bold text-white">---</h2>
-                <p class="text-sm text-slate-400 mt-0.5">Баланс времени: <span id="admin-detail-total" class="font-bold text-emerald-400">0 ч.</span></p>
-            </div>
-            <button onclick="openLogEditor()" class="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-bold active:scale-95 transition-all cursor-pointer">+ Добавить день</button>
-        </div>
-        <div class="overflow-x-auto max-h-72 overflow-y-auto mb-6 border border-slate-800 rounded-xl bg-slate-950/50">
-            <table class="w-full text-sm text-left border-collapse">
-                <thead class="text-slate-500 uppercase text-xs bg-slate-950 sticky top-0 border-b border-slate-800">
-                    <tr>
-                        <th class="p-4">Дата</th>
-                        <th class="p-4">Приход</th>
-                        <th class="p-4">Уход</th>
-                        <th class="p-4">Отработано</th>
-                        <th class="p-4 text-right">Действие</th>
-                    </tr>
-                </thead>
-                <tbody id="admin-employee-logs-body" class="text-slate-300 divide-y divide-slate-800/60"></tbody>
-            </table>
-        </div>
-        <div class="grid grid-cols-2 gap-4">
-            <button onclick="deleteEmployee()" class="py-4 rounded-xl text-sm font-semibold bg-rose-950/40 text-rose-400 border border-rose-900/30 active:scale-95 transition-all cursor-pointer">Удалить сотрудника</button>
-            <button onclick="showAdminDashboard()" class="py-4 rounded-xl text-sm font-semibold bg-slate-800 text-slate-300 active:scale-95 transition-all cursor-pointer">Назад к списку</button>
-        </div>
-    </div>
-
-    <!-- ЭКРАН 3: РЕДАКТИРОВАНИЕ ЛОГА -->
-    <div id="view-log-editor" class="view w-full max-w-md bg-slate-900 p-6 rounded-3xl shadow-2xl border border-slate-800 flex-col">
-        <h3 id="editor-title" class="text-xl font-bold text-white mb-6 text-center">Редактирование дня</h3>
-        <div class="space-y-5 mb-8">
-            <div>
-                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Дата смены</label>
-                <input type="date" id="edit-date" class="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white font-medium focus:outline-none focus:border-indigo-500">
-            </div>
-            <div>
-                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Время прихода</label>
-                <input type="time" id="edit-in" class="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono focus:outline-none focus:border-indigo-500">
-            </div>
-            <div>
-                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Время ухода</label>
-                <input type="time" id="edit-out" class="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono focus:outline-none focus:border-indigo-500">
-            </div>
-        </div>
-        <div class="space-y-3">
-            <button onclick="saveLog()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-base active:scale-95 transition-all cursor-pointer">Сохранить день</button>
-            <div class="grid grid-cols-2 gap-3">
-                <button id="btn-delete-log" onclick="deleteLog()" class="py-3 bg-rose-950/40 text-rose-400 border border-rose-900/30 rounded-xl text-sm font-medium active:scale-95 transition-all cursor-pointer">Удалить лог</button>
-                <button onclick="closeLogEditor()" class="py-3 bg-slate-800 text-slate-300 rounded-xl text-sm font-medium active:scale-95 transition-all cursor-pointer">Отмена</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- ЭКРАН 4: СОЗДАНИЕ СОТРУДНИКА -->
-    <div id="view-employee-editor" class="view w-full max-w-md bg-slate-900 p-6 rounded-3xl shadow-2xl border border-slate-800 flex-col">
-        <h3 class="text-xl font-bold text-white mb-6 text-center">Новый сотрудник</h3>
-        <div class="space-y-5 mb-8">
-            <div>
-                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Имя и Фамилия</label>
-                <input type="text" id="new-emp-name" placeholder="Напр. Петр Петров" class="w-full px-4 py-4 bg-slate-950 border border-slate-800 rounded-xl text-white font-medium text-lg focus:outline-none focus:border-indigo-500">
-            </div>
-            <div>
-                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Штрих-код / ID код</label>
-                <input type="text" id="new-emp-id" placeholder="Напр. 5555" class="w-full px-4 py-4 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono text-lg focus:outline-none focus:border-indigo-500">
-            </div>
-        </div>
-        <div class="space-y-3">
-            <button onclick="saveEmployee()" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-base active:scale-95 transition-all cursor-pointer">Сохранить сотрудника</button>
-            <button onclick="showAdminDashboard()" class="w-full py-3 bg-slate-800 text-slate-300 rounded-xl text-sm font-medium active:scale-95 transition-all cursor-pointer">Отмена</button>
-        </div>
+<body class="bg-slate-950 flex flex-col items-center justify-center h-screen p-4 text-slate-200">
+    <div id="login-box" class="bg-slate-900 p-8 rounded-3xl shadow-2xl border border-slate-800 w-full max-w-sm text-center">
+        <h2 class="text-2xl font-bold text-white mb-6">Доступ закрыт</h2>
+        <div id="msg" class="text-rose-400 text-sm mb-4 hidden"></div>
+        <input type="password" id="pwd" class="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500 mb-6" placeholder="Введите пароль">
+        <button onclick="unlock()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all cursor-pointer">Войти</button>
     </div>
 
     <script>
-        const firebaseConfig = { 
-            apiKey: "AIzaSyDmXlxkW8m6u-M_-l_iYIBE2w32LmHUxVA", 
-            authDomain: "family-work-time.firebaseapp.com", 
-            databaseURL: "https://family-work-time-default-rtdb.firebaseio.com", 
-            projectId: "family-work-time", 
-            storageBucket: "family-work-time.firebasestorage.app", 
-            messagingSenderId: "959352680173", 
-            appId: "1:959352680173:web:9f34f24007cd52fe90e6e4", 
-            measurementId: "G-CH6YKMK02V" 
-        };
+        const ENC_PAYLOAD = "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";
+        const ALLOWED_IP = "92.181.2.61";
 
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
-
-        let employees = [];
-        let logs = [];
-        let currentEmp = null;
-        let selectedLogId = null;
-
-        db.ref('employees').on('value', snapshot => {
-            const data = snapshot.val();
-            employees = data ? Object.values(data) : [];
-            if (document.getElementById('view-admin-dashboard').classList.contains('active')) {
-                renderAdminDashboard();
-            }
-        });
-
-        db.ref('logs').on('value', snapshot => {
-            const data = snapshot.val();
-            logs = data ? Object.values(data) : [];
-            if (document.getElementById('view-admin-dashboard').classList.contains('active')) {
-                renderAdminDashboard();
-            }
-            if (document.getElementById('view-admin-employee-detail').classList.contains('active') && currentEmp) {
-                renderAdminEmployeeLogs();
-            }
-        });
-
-        function changeView(viewId) {
-            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-            document.getElementById(viewId).classList.add('active');
+        function showError(text) {
+            const msg = document.getElementById('msg');
+            msg.textContent = text;
+            msg.classList.remove('hidden');
         }
 
-        function showAdminDashboard() {
-            document.getElementById('search-emp').value = '';
-            changeView('view-admin-dashboard');
-            renderAdminDashboard();
-        }
-
-        function renderAdminDashboard() {
-            const listContainer = document.getElementById('admin-employee-list');
-            const searchTerm = document.getElementById('search-emp').value.toLowerCase();
-            listContainer.innerHTML = '';
-
-            document.getElementById('stat-emp-count').textContent = employees.length;
-
-            // Фильтрация для списка
-            const filteredEmps = employees.filter(emp => 
-                emp.name.toLowerCase().includes(searchTerm) || String(emp.id).includes(searchTerm)
-            );
-
-            if (filteredEmps.length === 0) {
-                listContainer.innerHTML = `<p class="text-center text-slate-500 py-4 text-sm">Сотрудники не найдены</p>`;
-                return;
-            }
-
-            filteredEmps.forEach(emp => {
-                const empLogs = logs.filter(l => String(l.empId) === String(emp.id));
-                const totalMinutes = empLogs.reduce((acc, l) => acc + (l.out ? (new Date(l.out) - new Date(l.in)) / 60000 : 0), 0);
-                
-                const div = document.createElement('div');
-                div.className = "w-full p-4 bg-slate-800/50 border border-slate-800 hover:bg-slate-800 active:scale-[0.98] rounded-2xl flex justify-between items-center cursor-pointer transition-all";
-                div.onclick = () => openAdminEmployeeDetail(emp.id);
-                div.innerHTML = `
-                    <div>
-                        <h3 class="font-bold text-lg text-white">${emp.name}</h3>
-                        <p class="text-xs text-slate-400 font-mono mt-0.5">ID: ${emp.id}</p>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <span class="text-xs text-slate-500">${empLogs.length} смен</span>
-                        <span class="text-sm font-bold text-indigo-400 bg-indigo-950/50 px-3 py-1.5 rounded-xl border border-indigo-900/40">${formatMinutes(totalMinutes)}</span>
-                    </div>`;
-                listContainer.appendChild(div);
-            });
-        }
-
-        // --- ЭКСПОРТ В TXT ---
-        function exportToTXT() {
-            if (employees.length === 0) {
-                alert("Нет данных для экспорта");
-                return;
-            }
-
-            let txtContent = "";
-
-            employees.forEach(emp => {
-                const empLogs = logs
-                    .filter(l => String(l.empId) === String(emp.id))
-                    .sort((a, b) => new Date(a.date) - new Date(b.date));
-
-                const totalMinutes = empLogs.reduce((acc, l) => acc + (l.out ? (new Date(l.out) - new Date(l.in)) / 60000 : 0), 0);
-                const hours = Math.floor(totalMinutes / 60);
-                const mins = Math.floor(totalMinutes % 60);
-
-                txtContent += `${emp.name}\n`;
-                txtContent += `${emp.id}\n`;
-                txtContent += `ore total : ${hours}H ${mins}M\n`;
-
-                empLogs.forEach(l => {
-                    const start = new Date(l.in);
-                    const end = l.out ? new Date(l.out) : null;
-                    
-                    const inStr = start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    const outStr = end ? end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : "В смене";
-                    const dateStr = formatDisplayDate(l.date);
-
-                    txtContent += `     ${dateStr} ( ${inStr} - ${outStr} )\n`;
-                });
-                txtContent += "\n"; 
-            });
-
-            const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.setAttribute("href", url);
-            
-            const today = new Date().toISOString().split('T')[0];
-            link.setAttribute("download", `Отчет_Сотрудники_${today}.txt`);
-            
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-
-        // --- ЭКСПОРТ В CSV ---
-        function exportToCSV() {
-            if (employees.length === 0) {
-                alert("Нет данных для экспорта");
-                return;
-            }
-
-            let csvContent = "\uFEFF";
-            csvContent += "ID Сотрудника;Имя;Дата Смены;Приход;Уход;Отработано (минут);Отработано (формат)\n";
-
-            employees.forEach(emp => {
-                const empLogs = logs
-                    .filter(l => String(l.empId) === String(emp.id))
-                    .sort((a, b) => new Date(a.date) - new Date(b.date));
-
-                if (empLogs.length === 0) {
-                    csvContent += `"${emp.id}";"${emp.name}";"Нет смен";"";"";"0";"0 ч. 0 мин."\n`;
+        async function verifyAccess(callback) {
+            if (!ALLOWED_IP) return callback();
+            try {
+                const res = await fetch('https://api.ipify.org?format=json');
+                const data = await res.json();
+                if (data.ip === ALLOWED_IP) {
+                    callback();
                 } else {
-                    empLogs.forEach(l => {
-                        const start = new Date(l.in);
-                        const end = l.out ? new Date(l.out) : null;
-                        const diffMins = end ? (end - start) / 60000 : 0;
-
-                        const inStr = start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                        const outStr = end ? end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : "В смене";
-                        const dateStr = formatDisplayDate(l.date);
-                        const formattedTime = end ? formatMinutes(diffMins) : "-";
-
-                        csvContent += `"${emp.id}";"${emp.name}";"${dateStr}";"${inStr}";"${outStr}";"${Math.floor(diffMins)}";"${formattedTime}"\n`;
-                    });
+                    document.body.innerHTML = '<div class="flex items-center justify-center h-screen"><h1 class="text-rose-500 text-2xl font-bold">ОШИБКА ДОСТУПА. НЕВЕРНЫЙ IP-АДРЕС.</h1></div>';
                 }
-            });
-
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.setAttribute("href", url);
-            
-            const today = new Date().toISOString().split('T')[0];
-            link.setAttribute("download", `Отчет_Сотрудники_${today}.csv`);
-            
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            } catch (e) {
+                showError("Ошибка проверки IP-адреса");
+            }
         }
 
-        function openEmployeeEditor() {
-            changeView('view-employee-editor');
-            document.getElementById('new-emp-name').value = '';
-            document.getElementById('new-emp-id').value = '';
-        }
-
-        function saveEmployee() {
-            const name = document.getElementById('new-emp-name').value.trim();
-            const id = document.getElementById('new-emp-id').value.trim();
-
-            if (!name || !id) { alert("Заполните оба поля!"); return; }
-            if (employees.some(e => String(e.id) === String(id))) { alert("Сотрудник с таким кодом уже существует!"); return; }
-
-            const newEmp = { id, name };
-            db.ref('employees/' + id).set(newEmp);
-            showAdminDashboard();
-        }
-
-        function deleteEmployee() {
-            if (confirm(`Вы действительно хотите безвозвратно удалить сотрудника ${currentEmp.name}? Вся его история смен также будет удалена.`)) {
-                db.ref('employees/' + currentEmp.id).remove();
+        function decryptAndRun(password) {
+            try {
+                // Пытаемся расшифровать
+                const bytes = CryptoJS.AES.decrypt(ENC_PAYLOAD, password);
+                const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+                if (!decrypted) throw new Error("bad_password");
                 
-                logs.filter(l => String(l.empId) === String(currentEmp.id)).forEach(l => {
-                    db.ref('logs/' + l.id).remove();
-                });
-
-                showAdminDashboard();
+                // Сохраняем пароль локально (ПРИВЯЗКА К УСТРОЙСТВУ)
+                localStorage.setItem('admin_dev_token', password);
+                
+                // Переписываем страницу вашим исходным кодом
+                document.open();
+                document.write(decrypted);
+                document.close();
+            } catch (e) {
+                showError("Неверный пароль!");
+                localStorage.removeItem('admin_dev_token');
             }
         }
 
-        function openAdminEmployeeDetail(empId) {
-            currentEmp = employees.find(e => String(e.id) === String(empId));
-            changeView('view-admin-employee-detail');
-            renderAdminEmployeeLogs();
-        }
-
-        function renderAdminEmployeeLogs() {
-            document.getElementById('admin-detail-name').textContent = currentEmp.name;
-            const body = document.getElementById('admin-employee-logs-body');
-            body.innerHTML = '';
-            let totalMinutes = 0;
-            const empLogs = logs.filter(l => String(l.empId) === String(currentEmp.id)).sort((a, b) => new Date(b.date) - new Date(a.date));
-
-            if(empLogs.length === 0) {
-                body.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500">Нет записей о сменах</td></tr>`;
-            }
-
-            empLogs.forEach(l => {
-                const start = new Date(l.in);
-                const end = l.out ? new Date(l.out) : null;
-                const diff = end ? (end - start) / 60000 : 0;
-                totalMinutes += diff;
-                body.innerHTML += `
-                    <tr class="hover:bg-slate-800/30 transition-colors">
-                        <td class="p-4 font-medium">${formatDisplayDate(l.date)}</td>
-                        <td class="p-4 text-slate-400 font-mono">${start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
-                        <td class="p-4 text-slate-400 font-mono">${end ? end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '<span class="text-amber-500 text-xs px-2 py-1 bg-amber-950/50 rounded-lg">В смене</span>'}</td>
-                        <td class="p-4 font-semibold">${end ? formatMinutes(diff) : '-'}</td>
-                        <td class="p-4 text-right"><button onclick="openLogEditor('${l.id}')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-indigo-400 rounded-xl text-xs font-bold active:scale-95 cursor-pointer transition-colors">Изменить</button></td>
-                    </tr>`;
-            });
-            document.getElementById('admin-detail-total').textContent = formatMinutes(totalMinutes);
-        }
-
-        function openLogEditor(logId = null) {
-            selectedLogId = logId;
-            changeView('view-log-editor');
-            const title = document.getElementById('editor-title');
-            const deleteBtn = document.getElementById('btn-delete-log');
-            if (logId) {
-                title.textContent = "Редактирование дня"; deleteBtn.style.display = "block";
-                const logItem = logs.find(l => l.id === logId);
-                document.getElementById('edit-date').value = logItem.date;
-                document.getElementById('edit-in').value = new Date(logItem.in).toTimeString().substring(0, 5);
-                document.getElementById('edit-out').value = logItem.out ? new Date(logItem.out).toTimeString().substring(0, 5) : "";
-            } else {
-                title.textContent = "Добавление дня"; deleteBtn.style.display = "none";
-                document.getElementById('edit-date').value = new Date().toISOString().split('T')[0];
-                document.getElementById('edit-in').value = "09:00"; document.getElementById('edit-out').value = "18:00";
-            }
-        }
-
-        function closeLogEditor() { changeView('view-admin-employee-detail'); }
-
-        function saveLog() {
-            const dateVal = document.getElementById('edit-date').value;
-            const inVal = document.getElementById('edit-in').value;
-            const outVal = document.getElementById('edit-out').value;
-            if (!dateVal || !inVal) { alert("Заполните дату и время прихода"); return; }
+        function unlock() {
+            const pwd = document.getElementById('pwd').value;
+            if (!pwd) return showError("Введите пароль");
             
-            const isoIn = new Date(`${dateVal}T${inVal}:00`).toISOString();
-            const isoOut = outVal ? new Date(`${dateVal}T${outVal}:00`).toISOString() : null;
-
-            const logId = selectedLogId || ('log_' + Date.now());
-            const logData = { id: logId, empId: currentEmp.id, date: dateVal, in: isoIn, out: isoOut };
-
-            db.ref('logs/' + logId).set(logData);
-            changeView('view-admin-employee-detail');
+            verifyAccess(() => {
+                decryptAndRun(pwd);
+            });
         }
 
-        function deleteLog() {
-            if (confirm("Удалить эту запись безвозвратно?")) {
-                db.ref('logs/' + selectedLogId).remove();
-                changeView('view-admin-employee-detail');
+        // Авто-вход для привязанного устройства
+        window.onload = () => {
+            const savedPwd = localStorage.getItem('admin_dev_token');
+            if (savedPwd) {
+                document.getElementById('login-box').style.display = 'none'; // Прячем форму пока грузится
+                verifyAccess(() => {
+                    decryptAndRun(savedPwd);
+                });
             }
-        }
-
-        function formatMinutes(mnd) { return `${Math.floor(mnd / 60)} ч. ${Math.floor(mnd % 60)} мин.`; }
-        function formatDisplayDate(dStr) { const p = dStr.split('-'); return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : dStr; }
+        };
     </script>
 </body>
 </html>
